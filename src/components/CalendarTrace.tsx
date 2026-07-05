@@ -19,9 +19,17 @@ interface CalendarTraceProps {
   days: CalendarDayStatus[];
   selectedDate: string;
   onSelect: (date: string) => void;
+  showPastDays?: boolean;
+  onTogglePastDays?: (show: boolean) => void;
 }
 
-export function CalendarTrace({ days, selectedDate, onSelect }: CalendarTraceProps) {
+export function CalendarTrace({
+  days,
+  selectedDate,
+  onSelect,
+  showPastDays = false,
+  onTogglePastDays,
+}: CalendarTraceProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef<HTMLButtonElement>(null);
 
@@ -52,15 +60,32 @@ export function CalendarTrace({ days, selectedDate, onSelect }: CalendarTracePro
 
   return (
     <section className="card p-4 sm:p-5">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h2 className="section-title">جدول التتبع اليومي</h2>
-          <p className="section-subtitle mt-0.5">من اليوم حتى ٨ أغسطس ٢٠٢٦</p>
+          <p className="section-subtitle mt-0.5">
+            {showPastDays ? 'من ٥ يوليو حتى ٨ أغسطس ٢٠٢٦' : 'من اليوم حتى ٨ أغسطس ٢٠٢٦'}
+          </p>
         </div>
-        <div className="hidden items-center gap-3 text-[10px] font-semibold text-slate-400 sm:flex">
-          <LegendDot color="emerald" label="مكتمل" />
-          <LegendDot color="amber" label="تجاوز الصوديوم" />
-          <LegendDot color="slate" label="قيد التنفيذ" />
+        <div className="flex flex-wrap items-center gap-4 text-[10px] font-semibold text-slate-400 sm:gap-6">
+          <label className="flex cursor-pointer items-center gap-2 text-[11px] font-bold text-slate-300">
+            <input
+              type="checkbox"
+              checked={showPastDays}
+              onChange={(e) => onTogglePastDays?.(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="relative h-5 w-9 rounded-full bg-slate-700 after:absolute after:top-[2px] after:left-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-emerald-500 peer-checked:after:translate-x-full" />
+            <span>عرض الأيام السابقة (من ٥ يوليو)</span>
+          </label>
+
+          <div className="hidden h-4 w-px bg-white/10 sm:block" />
+
+          <div className="flex items-center gap-3">
+            <LegendDot color="emerald" label="مكتمل" />
+            <LegendDot color="amber" label="تجاوز الصوديوم" />
+            <LegendDot color="slate" label="قيد التنفيذ" />
+          </div>
         </div>
       </div>
 

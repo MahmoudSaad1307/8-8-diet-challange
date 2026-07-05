@@ -8,6 +8,7 @@ import { DailySummary } from './components/DailySummary';
 import type { CalendarDayStatus, DailyLog, DailyTotals, FoodEntry, ParsedFoodItem } from './lib/types';
 import {
   GOAL_DATE,
+  START_DATE,
   TARGETS,
   START_WEIGHT_KG,
   TARGET_WEIGHT_KG,
@@ -36,6 +37,14 @@ function App() {
 
   const today = useMemo(() => startOfDay(new Date()), []);
   const [selectedDate, setSelectedDate] = useState<string>(formatDateKey(today));
+
+  const [showPastDays, setShowPastDays] = useState<boolean>(() => {
+    return localStorage.getItem('show_past_days') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('show_past_days', String(showPastDays));
+  }, [showPastDays]);
 
   const [allLogs, setAllLogs] = useState<DailyLog[]>([]);
   const [allFoods, setAllFoods] = useState<FoodEntry[]>([]);
@@ -69,9 +78,10 @@ function App() {
     loadDay(selectedDate);
   }, [selectedDate, loadDay]);
 
-  // Build calendar days from today to goal date
+  // Build calendar days from start/today to goal date
   const calendarDays: CalendarDayStatus[] = useMemo(() => {
-    const total = daysBetween(today, GOAL_DATE);
+    const calendarStart = showPastDays ? START_DATE : today;
+    const total = daysBetween(calendarStart, GOAL_DATE);
     const logMap = new Map(allLogs.map((l) => [l.log_date, l]));
     const foodMap = new Map<string, FoodEntry[]>();
     for (const f of allFoods) {
@@ -81,7 +91,7 @@ function App() {
 
     const days: CalendarDayStatus[] = [];
     for (let i = 0; i <= total; i++) {
-      const d = addDays(today, i);
+      const d = addDays(calendarStart, i);
       const key = formatDateKey(d);
       const log = logMap.get(key) ?? null;
       const foods = foodMap.get(key) ?? [];
@@ -104,7 +114,7 @@ function App() {
       });
     }
     return days;
-  }, [allLogs, allFoods, today]);
+  }, [allLogs, allFoods, today, showPastDays]);
 
   // Daily totals from current foods
   const dailyTotals: DailyTotals = useMemo(() => {
@@ -209,6 +219,8 @@ function App() {
           days={calendarDays}
           selectedDate={selectedDate}
           onSelect={setSelectedDate}
+          showPastDays={showPastDays}
+          onTogglePastDays={setShowPastDays}
         />
 
         {loading ? (
