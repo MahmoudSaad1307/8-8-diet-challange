@@ -18,7 +18,7 @@ import { aggregateItems, formatGrams, parseFoodText } from '../lib/nlpParser';
 import { TARGETS, toArabicDigits } from '../lib/constants';
 import { isSupabaseEnabled } from '../lib/supabase';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_URL = import.meta.env.VITE_yeah as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 interface FoodLoggerProps {
@@ -38,10 +38,10 @@ const EXAMPLES = [
 type Stage = 'input' | 'analyzing' | 'preview' | 'saving';
 
 type ApiErrorCode =
-  | 'GEMINI_API_KEY_MISSING'
-  | 'GEMINI_API_KEY_INVALID'
-  | 'GEMINI_RATE_LIMIT'
-  | 'GEMINI_API_ERROR'
+  | 'OPENAI_API_KEY_MISSING'
+  | 'OPENAI_API_KEY_INVALID'
+  | 'OPENAI_RATE_LIMIT'
+  | 'OPENAI_API_ERROR'
   | 'NETWORK'
   | 'INTERNAL_ERROR'
   | null;
@@ -53,24 +53,24 @@ interface ApiErrorState {
 }
 
 const ERROR_MESSAGES: Record<NonNullable<ApiErrorCode>, { title: string; body: string; color: 'amber' | 'rose' | 'orange' }> = {
-  GEMINI_API_KEY_MISSING: {
-    title: 'مفتاح Gemini API غير مضاف',
-    body: 'أضف VITE_GEMINI_API_KEY إلى ملف الـ .env أو GEMINI_API_KEY في Supabase secrets.',
+  OPENAI_API_KEY_MISSING: {
+    title: 'مفتاح OpenAI API غير مضاف',
+    body: 'أضف OPENAI_API_KEY إلى Supabase → Edge Functions → Secrets.',
     color: 'amber',
   },
-  GEMINI_API_KEY_INVALID: {
-    title: 'مفتاح Gemini API غير صحيح أو منتهي',
-    body: 'المفتاح المضاف مرفوض من Google Gemini. تحقق من صحته.',
+  OPENAI_API_KEY_INVALID: {
+    title: 'مفتاح OpenAI API غير صحيح أو منتهي',
+    body: 'المفتاح المضاف مرفوض من OpenAI (HTTP 401). تحقق من صحته.',
     color: 'amber',
   },
-  GEMINI_RATE_LIMIT: {
-    title: 'تجاوزت الحصة المسموحة لـ Gemini',
+  OPENAI_RATE_LIMIT: {
+    title: 'تجاوزت الحصة المسموحة لـ OpenAI',
     body: 'الحساب وصل لحد الاستخدام. انتظر دقيقة وحاول مجدداً.',
     color: 'orange',
   },
-  GEMINI_API_ERROR: {
-    title: 'خطأ في Gemini API',
-    body: 'Gemini أرجع خطأ غير متوقع. حاول مجدداً.',
+  OPENAI_API_ERROR: {
+    title: 'خطأ في OpenAI API',
+    body: 'OpenAI أرجع خطأ غير متوقع. حاول مجدداً.',
     color: 'rose',
   },
   NETWORK: {
@@ -95,96 +95,8 @@ class ParseFoodError extends Error {
   }
 }
 
-const SYSTEM_PROMPT = `أنت خبير تغذية. حلّل وصف الطعام بالعربية أو الإنجليزية.
-
-قواعد الحساب حسب طريقة الطهي:
-- ني/خام/raw: أرز ني ≈365 كcal/100جم · فراخ نيئة ≈120 كcal · شوفان ني ≈389 كcal
-- مسلوق/boiled: أرز مسلوق ≈130 كcal · فراخ مسلوقة ≈150 كcal
-- مشوي/مستوي/grilled: فراخ مشوية ≈165 كcal · لحم مشوي ≈217 كcal
-- مقلي/fried: يزيد الدهون والسعرات بشكل كبير
-
-قواعد الكميات:
-- إذا ذُكرت كمية بالجرام استخدمها بالضبط
-- إذا ذُكرت أعداد (٣ بيض) احسب الوزن: بيضة واحدة ≈55 جم
-- إذا لم تُذكر كمية استخدم حصة افتراضية معقولة
-
-أرجح JSON بالشكل التالي فقط بدون أي نص إضافي:
-{"items": [{"name":"...","qty_g":100,"calories":0,"protein":0,"carbs":0,"fats":0,"sodium":0,"potassium":0}]}
-
-الحقول:
-- name: اسم الطعام بالعربية مع طريقة الطهي
-- qty_g: كمية بالجرام (رقم)
-- calories: سعرات حرارية (رقم صحيح)
-- protein: بروتين جرام (رقم عشري)
-- carbs: كربوهيدرات جرام (رقم عشري)
-- fats: دهون جرام (رقم عشري)
-- sodium: صوديوم ملليجرام (رقم صحيح)
-- potassium: بوتاسيوم ملليجرام (رقم صحيح)
-
-إذا لم تجد أطعمة: {"items": []}`;
-
-async function callGeminiDirectly(text: string): Promise<ParsedFoodItem[]> {
-  const apiKey = (import.meta.env.VITE_GEMINI_API_KEY as string || '').trim();
-  console.log("[callGeminiDirectly] API Key check:", {
-    exists: !!apiKey,
-    length: apiKey.length,
-    preview: apiKey ? apiKey.slice(0, 10) + "..." + apiKey.slice(-10) : "none"
-  });
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: SYSTEM_PROMPT }]
-        },
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: `حلّل: "${text}"` }]
-          }
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-        }
-      }),
-    });
-  } catch (e) {
-    console.error("[callGeminiDirectly] Network error:", e);
-    throw new ParseFoodError('NETWORK', null, `Network error: ${String(e)}`);
-  }
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    console.error("[callGeminiDirectly] Gemini API error:", res.status, errText);
-    throw new ParseFoodError('GEMINI_API_ERROR', res.status, `Gemini HTTP ${res.status}: ${errText.slice(0, 150)}`);
-  }
-
-  const data = await res.json().catch(() => ({}) as Record<string, unknown>) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
-  };
-  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{"items":[]}';
-
-  try {
-    const parsed = JSON.parse(raw) as { items?: ParsedFoodItem[] };
-    return parsed.items ?? [];
-  } catch (e) {
-    console.error('Failed to parse Gemini response:', raw, e);
-    return [];
-  }
-}
-
 async function callParseFoodEdgeFunction(text: string): Promise<ParsedFoodItem[]> {
   if (!isSupabaseEnabled) {
-    if (import.meta.env.VITE_GEMINI_API_KEY) {
-      return callGeminiDirectly(text);
-    }
     return parseFoodText(text);
   }
 
@@ -215,15 +127,15 @@ async function callParseFoodEdgeFunction(text: string): Promise<ParsedFoodItem[]
   if (!res.ok) {
     const code = body.error as ApiErrorCode | undefined;
     const knownCodes: ApiErrorCode[] = [
-      'GEMINI_API_KEY_MISSING',
-      'GEMINI_API_KEY_INVALID',
-      'GEMINI_RATE_LIMIT',
-      'GEMINI_API_ERROR',
+      'OPENAI_API_KEY_MISSING',
+      'OPENAI_API_KEY_INVALID',
+      'OPENAI_RATE_LIMIT',
+      'OPENAI_API_ERROR',
       'INTERNAL_ERROR',
     ];
     const resolvedCode: ApiErrorCode = knownCodes.includes(code ?? null as never)
       ? (code as ApiErrorCode)
-      : 'GEMINI_API_ERROR';
+      : 'OPENAI_API_ERROR';
     throw new ParseFoodError(resolvedCode, res.status, body.message ?? `HTTP ${res.status}`);
   }
 
@@ -485,7 +397,7 @@ export function FoodLogger({ isFuture, entries, onAdd, onDelete }: FoodLoggerPro
 
 function ApiErrorBanner({ err }: { err: ApiErrorState }) {
   if (!err.code) return null;
-  const cfg = ERROR_MESSAGES[err.code] ?? ERROR_MESSAGES.GEMINI_API_ERROR;
+  const cfg = ERROR_MESSAGES[err.code] ?? ERROR_MESSAGES.OPENAI_API_ERROR;
 
   const borderMap = { amber: 'border-amber-400/40', rose: 'border-rose-400/40', orange: 'border-orange-400/40' };
   const bgMap = { amber: 'bg-amber-500/10', rose: 'bg-rose-500/10', orange: 'bg-orange-500/10' };
@@ -493,10 +405,10 @@ function ApiErrorBanner({ err }: { err: ApiErrorState }) {
   const bodyMap = { amber: 'text-amber-300/80', rose: 'text-rose-300/80', orange: 'text-orange-300/80' };
 
   const iconMap: Record<NonNullable<ApiErrorCode>, ReactNode> = {
-    GEMINI_API_KEY_MISSING: <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />,
-    GEMINI_API_KEY_INVALID: <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />,
-    GEMINI_RATE_LIMIT: <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-orange-300" />,
-    GEMINI_API_ERROR: <ServerCrash className="mt-0.5 h-5 w-5 shrink-0 text-rose-300" />,
+    OPENAI_API_KEY_MISSING: <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />,
+    OPENAI_API_KEY_INVALID: <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />,
+    OPENAI_RATE_LIMIT: <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-orange-300" />,
+    OPENAI_API_ERROR: <ServerCrash className="mt-0.5 h-5 w-5 shrink-0 text-rose-300" />,
     NETWORK: <WifiOff className="mt-0.5 h-5 w-5 shrink-0 text-rose-300" />,
     INTERNAL_ERROR: <ServerCrash className="mt-0.5 h-5 w-5 shrink-0 text-rose-300" />,
   };

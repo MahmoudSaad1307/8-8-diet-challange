@@ -68,7 +68,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── 3. Call Gemini ────────────────────────────────────────────────────
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     const geminiRes = await fetch(geminiUrl, {
       method: "POST",
       headers: {
