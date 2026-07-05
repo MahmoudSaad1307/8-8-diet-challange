@@ -202,6 +202,10 @@ async function callParseFoodEdgeFunction(text: string): Promise<ParsedFoodItem[]
       body: JSON.stringify({ text }),
     });
   } catch (e) {
+    if (import.meta.env.VITE_GEMINI_API_KEY) {
+      console.warn("Edge Function call failed. Falling back to direct Gemini call.", e);
+      return callGeminiDirectly(text);
+    }
     throw new ParseFoodError('NETWORK', null, `Network error: ${String(e)}`);
   }
 
@@ -213,6 +217,11 @@ async function callParseFoodEdgeFunction(text: string): Promise<ParsedFoodItem[]
   };
 
   if (!res.ok) {
+    if (res.status === 404 && import.meta.env.VITE_GEMINI_API_KEY) {
+      console.warn("Edge Function not found (404). Falling back to direct Gemini call.");
+      return callGeminiDirectly(text);
+    }
+
     const code = body.error as ApiErrorCode | undefined;
     const knownCodes: ApiErrorCode[] = [
       'GEMINI_API_KEY_MISSING',
