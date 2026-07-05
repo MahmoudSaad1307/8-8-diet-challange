@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Header } from './components/Header';
+import { MahmoudAuth } from './components/MahmoudAuth';
 import { CalendarTrace } from './components/CalendarTrace';
 import { DailyLogPanel } from './components/DailyLogPanel';
 import { FoodLogger } from './components/FoodLogger';
@@ -29,6 +30,10 @@ import {
 } from './lib/db';
 
 function App() {
+  const [isAuthorized, setIsAuthorized] = useState<boolean>(() => {
+    return localStorage.getItem('mahmoud_authorized') === 'true';
+  });
+
   const today = useMemo(() => startOfDay(new Date()), []);
   const [selectedDate, setSelectedDate] = useState<string>(formatDateKey(today));
 
@@ -170,6 +175,10 @@ function App() {
     },
     [selectedDate],
   );
+
+  if (!isAuthorized) {
+    return <MahmoudAuth onSuccess={() => setIsAuthorized(true)} />;
+  }
 
   return (
     <div className="min-h-screen pb-16">
