@@ -7,9 +7,9 @@ export const TARGET_WEIGHT_KG = 65.0;
 
 export const TARGETS: DailyTargets = {
   calories: 1500,
-  protein: 150,
-  carbs: 125,
-  fats: 38,
+  protein: 125,
+  carbs: 150,
+  fats: 44,
   sodiumLimit: 2300,
   potassiumMin: 3500,
   potassiumMax: 4700,
