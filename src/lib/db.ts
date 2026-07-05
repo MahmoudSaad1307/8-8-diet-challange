@@ -175,16 +175,21 @@ export async function addFoodEntry(
   };
 
   if (isSupabaseEnabled && supabase) {
-    // Ensure a daily_logs row exists for FK integrity
-    const { error: logErr } = await supabase
+    // Ensure a daily_logs row exists for FK integrity (avoid overwriting existing columns)
+    const { data: existingLog } = await supabase
       .from('daily_logs')
-      .upsert(
-        { log_date: logDate, weight_kg: null, resistance_done: false, cardio_calories: 0, water_liters: 0 },
-        { onConflict: 'log_date' },
-      );
-    if (logErr) {
-      // eslint-disable-next-line no-console
-      console.warn('ensure log row error', logErr);
+      .select('log_date')
+      .eq('log_date', logDate)
+      .maybeSingle();
+
+    if (!existingLog) {
+      const { error: logErr } = await supabase
+        .from('daily_logs')
+        .insert({ log_date: logDate });
+      if (logErr) {
+        // eslint-disable-next-line no-console
+        console.warn('ensure log row error', logErr);
+      }
     }
     const { data, error } = await supabase
       .from('food_entries')
