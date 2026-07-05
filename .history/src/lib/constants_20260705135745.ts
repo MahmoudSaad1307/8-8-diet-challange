@@ -2,7 +2,7 @@ import type { DailyTargets } from './types';
 
 export const GOAL_DATE = new Date('2026-08-08T23:59:59');
 
-export const START_WEIGHT_KG = 69.7;
+export const START_WEIGHT_KG = 69.5;
 export const TARGET_WEIGHT_KG = 65.0;
 
 export const TARGETS: DailyTargets = {
