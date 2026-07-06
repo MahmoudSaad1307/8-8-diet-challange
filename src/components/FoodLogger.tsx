@@ -309,7 +309,12 @@ export function FoodLogger({ isFuture, entries, onAdd, onDelete }: FoodLoggerPro
               value={text}
               disabled={stage === 'analyzing'}
               onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleAnalyze(); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleAnalyze();
+                }
+              }}
               placeholder={
                 stage === 'analyzing'
                   ? 'جارٍ التحليل...'
