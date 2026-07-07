@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Target, Calendar, TrendingDown, Flame, Scale } from 'lucide-react';
 import {
   GOAL_DATE,
+  START_DATE,
   START_WEIGHT_KG,
   TARGET_WEIGHT_KG,
   toArabicDigits,
@@ -40,9 +41,11 @@ function calcRemaining() {
 
 export function Header({ currentWeight }: HeaderProps) {
   const r = useCountdown();
-  const totalDays = daysBetween(startOfDay(new Date()), GOAL_DATE);
-  const elapsed = totalDays - r.days;
-  const timeProgress = Math.max(0, Math.min(100, (elapsed / totalDays) * 100));
+  
+  const now = new Date();
+  const totalMs = GOAL_DATE.getTime() - START_DATE.getTime();
+  const elapsedMs = now.getTime() - START_DATE.getTime();
+  const timeProgress = Math.max(0, Math.min(100, (elapsedMs / totalMs) * 100));
 
   const weight = currentWeight ?? START_WEIGHT_KG;
   const weightLost = Math.max(0, START_WEIGHT_KG - weight);
