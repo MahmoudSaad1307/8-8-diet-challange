@@ -127,7 +127,7 @@ async function callGeminiDirectly(text: string): Promise<ParsedFoodItem[]> {
     preview: apiKey ? apiKey.slice(0, 10) + "..." + apiKey.slice(-10) : "none"
   });
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
   let res: Response;
   try {
