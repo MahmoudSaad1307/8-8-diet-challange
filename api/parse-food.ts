@@ -63,7 +63,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     const model = (process.env.GEMINI_MODEL || 'gemini-3.8-flash').trim();
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const geminiRes = await fetch(geminiUrl, {
+    const requestInit = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -82,7 +82,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           responseMimeType: 'application/json',
         },
       }),
-    });
+    };
+
+    // Gemini returns transient 503 (high demand) / 429 often; retry a few times.
+    let geminiRes = await fetch(geminiUrl, requestInit);
+    for (let attempt = 1; attempt <= 2 && (geminiRes.status === 503 || geminiRes.status === 429); attempt++) {
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
+      geminiRes = await fetch(geminiUrl, requestInit);
+    }
 
     if (!geminiRes.ok) {
       const errText = await geminiRes.text().catch(() => '');
