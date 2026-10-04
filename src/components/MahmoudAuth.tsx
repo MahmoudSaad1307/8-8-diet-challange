@@ -23,6 +23,7 @@ export function MahmoudAuth({ onSuccess }: MahmoudAuthProps) {
     setTimeout(() => {
       if (password.trim() === expectedPassword) {
         localStorage.setItem('mahmoud_authorized', 'true');
+        localStorage.setItem('mahmoud_key', password.trim());
         onSuccess();
       } else {
         setError(true);

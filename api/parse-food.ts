@@ -26,7 +26,9 @@ const SYSTEM_PROMPT = `أنت خبير تغذية. حلّل وصف الطعام 
 
 إذا لم تجد أطعمة: {"items": []}`;
 
-export default async function handler(req: any, res: any) {
+import type { ApiRequest, ApiResponse } from './_db';
+
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   // Handle CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');

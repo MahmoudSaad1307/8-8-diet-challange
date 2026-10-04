@@ -32,7 +32,10 @@ import {
 
 function App() {
   const [isAuthorized, setIsAuthorized] = useState<boolean>(() => {
-    return localStorage.getItem('mahmoud_authorized') === 'true';
+    return (
+      localStorage.getItem('mahmoud_authorized') === 'true' &&
+      Boolean(localStorage.getItem('mahmoud_key'))
+    );
   });
 
   const today = useMemo(() => startOfDay(new Date()), []);
@@ -60,7 +63,6 @@ function App() {
       setAllFoods(foods);
       setLoading(false);
     })().catch((e) => {
-      // eslint-disable-next-line no-console
       console.warn('init load error', e);
       setLoading(false);
     });

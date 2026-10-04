@@ -1,25 +1,21 @@
-import { type ReactNode, useState } from 'react';
 import {
-  Sparkles,
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  KeyRound,
+  Loader2,
   Send,
+  ServerCrash,
+  Sparkles,
   Trash2,
   Utensils,
-  Info,
-  X,
-  CheckCircle2,
-  Loader2,
-  KeyRound,
-  AlertTriangle,
   WifiOff,
-  ServerCrash,
+  X,
 } from 'lucide-react';
-import type { FoodEntry, ParsedFoodItem } from '../lib/types';
-import { aggregateItems, formatGrams, parseFoodText } from '../lib/nlpParser';
+import { type ReactNode, useState } from 'react';
 import { TARGETS, toArabicDigits } from '../lib/constants';
-import { isSupabaseEnabled } from '../lib/supabase';
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+import { aggregateItems, formatGrams, parseFoodText } from '../lib/nlpParser';
+import type { FoodEntry, ParsedFoodItem } from '../lib/types';
 
 interface FoodLoggerProps {
   isFuture: boolean;
@@ -75,12 +71,12 @@ const ERROR_MESSAGES: Record<NonNullable<ApiErrorCode>, { title: string; body: s
   },
   NETWORK: {
     title: 'تعذّر الاتصال بالخادم',
-    body: 'تحقق من الإنترنت أو Supabase URL.',
+    body: 'تحقق من اتصال الإنترنت وحاول مجدداً.',
     color: 'rose',
   },
   INTERNAL_ERROR: {
-    title: 'خطأ داخلي في الـEdge Function',
-    body: 'حدث خطأ غير متوقع في الخادم. راجع Supabase Logs.',
+    title: 'خطأ داخلي في الخادم',
+    body: 'حدث خطأ غير متوقع. يرجى مراجعة سجلات Vercel.',
     color: 'rose',
   },
 };
@@ -222,56 +218,12 @@ async function callParseFoodApi(text: string): Promise<ParsedFoodItem[]> {
     console.warn('/api/parse-food endpoint not reached, checking fallback options...', e);
   }
 
-  // 2. Try Supabase Edge Function if Supabase is enabled
-  if (isSupabaseEnabled) {
-    const url = `${SUPABASE_URL}/functions/v1/parse-food`;
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          Apikey: SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({ text }),
-      });
-
-      if (res.status !== 404) {
-        const body = await res.json().catch(() => ({}) as Record<string, unknown>) as {
-          error?: string;
-          message?: string;
-          items?: ParsedFoodItem[];
-        };
-
-        if (!res.ok) {
-          const code = body.error as ApiErrorCode | undefined;
-          const knownCodes: ApiErrorCode[] = [
-            'GEMINI_API_KEY_MISSING',
-            'GEMINI_API_KEY_INVALID',
-            'GEMINI_RATE_LIMIT',
-            'GEMINI_API_ERROR',
-            'INTERNAL_ERROR',
-          ];
-          const resolvedCode: ApiErrorCode = knownCodes.includes(code ?? null as never)
-            ? (code as ApiErrorCode)
-            : 'GEMINI_API_ERROR';
-          throw new ParseFoodError(resolvedCode, res.status, body.message ?? `HTTP ${res.status}`);
-        }
-
-        if (Array.isArray(body.items)) return body.items;
-      }
-    } catch (e) {
-      if (e instanceof ParseFoodError) throw e;
-      console.warn('Supabase Edge Function failed, checking direct fallback...', e);
-    }
-  }
-
-  // 3. Fallback to direct Gemini API call if VITE_GEMINI_API_KEY is available
+  // 2. Fallback to direct Gemini API call if VITE_GEMINI_API_KEY is available
   if (import.meta.env.VITE_GEMINI_API_KEY) {
     return callGeminiDirectly(text);
   }
 
-  // 4. Offline fallback: local rule-based NLP parser
+  // 3. Offline fallback: local rule-based NLP parser
   return parseFoodText(text);
 }
 

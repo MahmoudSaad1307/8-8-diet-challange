@@ -1,11 +1,10 @@
-import { supabase, isSupabaseEnabled } from './supabase';
 import type { DailyLog, FoodEntry, ParsedFoodItem } from './types';
 import { formatDateKey } from './constants';
 
 const LS_LOG_PREFIX = 'cc:dailylog:';
 const LS_FOOD_PREFIX = 'cc:foodentries:';
 
-// ---------- Local storage fallback (used when Supabase is not configured) ----------
+// ---------- Local storage fallback (used when network fails or offline) ----------
 
 function lsGetLog(date: Date): DailyLog | null {
   const key = formatDateKey(date);
@@ -79,70 +78,67 @@ function lsAllFoods(): FoodEntry[] {
   return foods;
 }
 
+// ---------- API Client ----------
+
+async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const key = localStorage.getItem('mahmoud_key') || '';
+  const res = await fetch(path, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-app-key': key,
+      ...(init.headers || {}),
+    },
+  });
+
+  if (res.status === 401) {
+    localStorage.removeItem('mahmoud_authorized');
+    localStorage.removeItem('mahmoud_key');
+  }
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => null);
+    throw new Error(errorBody?.message || `API ${path} failed: HTTP ${res.status}`);
+  }
+
+  return (await res.json()) as T;
+}
+
 // ---------- Public API ----------
 
 export async function getDailyLog(date: Date): Promise<DailyLog | null> {
   const key = formatDateKey(date);
-  if (isSupabaseEnabled && supabase) {
-    const { data, error } = await supabase
-      .from('daily_logs')
-      .select('*')
-      .eq('log_date', key)
-      .maybeSingle();
-    if (error) {
-      // eslint-disable-next-line no-console
-      console.warn('getDailyLog error', error);
-      return lsGetLog(date);
-    }
-    return (data as DailyLog | null) ?? null;
+  try {
+    return await api<DailyLog | null>(`/api/logs?date=${encodeURIComponent(key)}`);
+  } catch (error) {
+    console.warn('getDailyLog error, falling back to local', error);
+    return lsGetLog(date);
   }
-  return lsGetLog(date);
 }
 
 export async function upsertDailyLog(
   log: Partial<DailyLog> & { log_date: string },
 ): Promise<DailyLog> {
-  if (isSupabaseEnabled && supabase) {
-    const { data, error } = await supabase
-      .from('daily_logs')
-      .upsert(
-        {
-          log_date: log.log_date,
-          weight_kg: log.weight_kg,
-          resistance_done: log.resistance_done,
-          cardio_calories: log.cardio_calories,
-          water_liters: log.water_liters,
-        },
-        { onConflict: 'log_date' },
-      )
-      .select()
-      .maybeSingle();
-    if (error || !data) {
-      // eslint-disable-next-line no-console
-      console.warn('upsertDailyLog error, falling back to local', error);
-      return lsUpsertLog(log);
-    }
-    return data as DailyLog;
+  try {
+    return await api<DailyLog>('/api/logs', {
+      method: 'PUT',
+      body: JSON.stringify(log),
+    });
+  } catch (error) {
+    console.warn('upsertDailyLog error, falling back to local', error);
+    return lsUpsertLog(log);
   }
-  return lsUpsertLog(log);
 }
 
 export async function getFoodEntries(date: Date): Promise<FoodEntry[]> {
   const key = formatDateKey(date);
-  if (isSupabaseEnabled && supabase) {
-    const { data, error } = await supabase
-      .from('food_entries')
-      .select('*')
-      .eq('log_date', key)
-      .order('created_at', { ascending: true });
-    if (error) {
-      // eslint-disable-next-line no-console
-      console.warn('getFoodEntries error', error);
-      return lsGetFoods(date);
-    }
-    return (data as FoodEntry[]) ?? [];
+  try {
+    const entries = await api<FoodEntry[]>(`/api/foods?date=${encodeURIComponent(key)}`);
+    return entries || [];
+  } catch (error) {
+    console.warn('getFoodEntries error, falling back to local', error);
+    return lsGetFoods(date);
   }
-  return lsGetFoods(date);
 }
 
 export async function addFoodEntry(
@@ -165,7 +161,7 @@ export async function addFoodEntry(
   const payload = {
     log_date: logDate,
     raw_text: rawText,
-    parsed_items: items as unknown as never,
+    parsed_items: items,
     calories: totals.calories,
     protein_g: totals.protein,
     carbs_g: totals.carbs,
@@ -174,73 +170,44 @@ export async function addFoodEntry(
     potassium_mg: totals.potassium,
   };
 
-  if (isSupabaseEnabled && supabase) {
-    // Ensure a daily_logs row exists for FK integrity (avoid overwriting existing columns)
-    const { data: existingLog } = await supabase
-      .from('daily_logs')
-      .select('log_date')
-      .eq('log_date', logDate)
-      .maybeSingle();
-
-    if (!existingLog) {
-      const { error: logErr } = await supabase
-        .from('daily_logs')
-        .insert({ log_date: logDate });
-      if (logErr) {
-        // eslint-disable-next-line no-console
-        console.warn('ensure log row error', logErr);
-      }
-    }
-    const { data, error } = await supabase
-      .from('food_entries')
-      .insert(payload)
-      .select()
-      .maybeSingle();
-    if (error || !data) {
-      // eslint-disable-next-line no-console
-      console.warn('addFoodEntry error, falling back to local', error);
-      return lsAddFood({ ...payload, id: '', created_at: '' } as never);
-    }
-    return data as FoodEntry;
+  try {
+    return await api<FoodEntry>('/api/foods', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    console.warn('addFoodEntry error, falling back to local', error);
+    return lsAddFood({ ...payload, id: '', created_at: '' } as never);
   }
-  return lsAddFood({ ...payload, id: '', created_at: '' } as never);
 }
 
 export async function deleteFoodEntry(id: string, date: Date): Promise<void> {
-  if (isSupabaseEnabled && supabase) {
-    const { error } = await supabase.from('food_entries').delete().eq('id', id);
-    if (error) {
-      // eslint-disable-next-line no-console
-      console.warn('deleteFoodEntry error', error);
-      lsDeleteFood(id, date);
-    }
-    return;
+  try {
+    await api(`/api/foods?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  } catch (error) {
+    console.warn('deleteFoodEntry error, falling back to local', error);
+    lsDeleteFood(id, date);
   }
-  lsDeleteFood(id, date);
 }
 
 export async function getAllLogs(): Promise<DailyLog[]> {
-  if (isSupabaseEnabled && supabase) {
-    const { data, error } = await supabase.from('daily_logs').select('*');
-    if (error || !data) {
-      // eslint-disable-next-line no-console
-      console.warn('getAllLogs error', error);
-      return lsAllLogs();
-    }
-    return data as DailyLog[];
+  try {
+    const logs = await api<DailyLog[]>('/api/logs');
+    return logs || [];
+  } catch (error) {
+    console.warn('getAllLogs error, falling back to local', error);
+    return lsAllLogs();
   }
-  return lsAllLogs();
 }
 
 export async function getAllFoodEntries(): Promise<FoodEntry[]> {
-  if (isSupabaseEnabled && supabase) {
-    const { data, error } = await supabase.from('food_entries').select('*');
-    if (error || !data) {
-      // eslint-disable-next-line no-console
-      console.warn('getAllFoodEntries error', error);
-      return lsAllFoods();
-    }
-    return data as FoodEntry[];
+  try {
+    const foods = await api<FoodEntry[]>('/api/foods');
+    return foods || [];
+  } catch (error) {
+    console.warn('getAllFoodEntries error, falling back to local', error);
+    return lsAllFoods();
   }
-  return lsAllFoods();
 }
