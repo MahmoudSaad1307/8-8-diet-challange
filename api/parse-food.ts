@@ -26,7 +26,7 @@ const SYSTEM_PROMPT = `أنت خبير تغذية. حلّل وصف الطعام 
 
 إذا لم تجد أطعمة: {"items": []}`;
 
-import type { ApiRequest, ApiResponse } from './_db';
+import type { ApiRequest, ApiResponse } from './_db.js';
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   // Handle CORS

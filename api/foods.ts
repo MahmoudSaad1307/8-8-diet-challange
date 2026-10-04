@@ -1,4 +1,4 @@
-import { getSql, authorize, FOOD_COLS, type ApiRequest, type ApiResponse } from './_db';
+import { getSql, authorize, FOOD_COLS, type ApiRequest, type ApiResponse } from './_db.js';
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (!authorize(req, res)) return;
