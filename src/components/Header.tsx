@@ -7,8 +7,6 @@ import {
   TARGET_WEIGHT_KG,
   toArabicDigits,
   formatArabicDate,
-  daysBetween,
-  startOfDay,
 } from '../lib/constants';
 
 interface HeaderProps {

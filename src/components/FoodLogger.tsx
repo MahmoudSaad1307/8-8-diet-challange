@@ -55,7 +55,7 @@ interface ApiErrorState {
 const ERROR_MESSAGES: Record<NonNullable<ApiErrorCode>, { title: string; body: string; color: 'amber' | 'rose' | 'orange' }> = {
   GEMINI_API_KEY_MISSING: {
     title: 'مفتاح Gemini API غير مضاف',
-    body: 'أضف VITE_GEMINI_API_KEY إلى ملف الـ .env أو GEMINI_API_KEY في Supabase secrets.',
+    body: 'أضف GEMINI_API_KEY في Vercel Environment Variables أو ملف الـ .env.',
     color: 'amber',
   },
   GEMINI_API_KEY_INVALID: {
@@ -180,64 +180,99 @@ async function callGeminiDirectly(text: string): Promise<ParsedFoodItem[]> {
   }
 }
 
-async function callParseFoodEdgeFunction(text: string): Promise<ParsedFoodItem[]> {
-  if (!isSupabaseEnabled) {
-    if (import.meta.env.VITE_GEMINI_API_KEY) {
-      return callGeminiDirectly(text);
-    }
-    return parseFoodText(text);
-  }
-
-  const url = `${SUPABASE_URL}/functions/v1/parse-food`;
-
-  let res: Response;
+async function callParseFoodApi(text: string): Promise<ParsedFoodItem[]> {
+  // 1. Try Vercel Serverless Function first (/api/parse-food)
   try {
-    res = await fetch(url, {
+    const res = await fetch('/api/parse-food', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        Apikey: SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({ text }),
     });
+
+    if (res.status !== 404) {
+      const body = await res.json().catch(() => ({}) as Record<string, unknown>) as {
+        error?: string;
+        message?: string;
+        items?: ParsedFoodItem[];
+      };
+
+      if (!res.ok) {
+        const code = body.error as ApiErrorCode | undefined;
+        const knownCodes: ApiErrorCode[] = [
+          'GEMINI_API_KEY_MISSING',
+          'GEMINI_API_KEY_INVALID',
+          'GEMINI_RATE_LIMIT',
+          'GEMINI_API_ERROR',
+          'INTERNAL_ERROR',
+        ];
+        const resolvedCode: ApiErrorCode = knownCodes.includes(code ?? null as never)
+          ? (code as ApiErrorCode)
+          : 'GEMINI_API_ERROR';
+        throw new ParseFoodError(resolvedCode, res.status, body.message ?? `HTTP ${res.status}`);
+      }
+
+      if (Array.isArray(body.items)) {
+        return body.items;
+      }
+    }
   } catch (e) {
-    if (import.meta.env.VITE_GEMINI_API_KEY) {
-      console.warn("Edge Function call failed. Falling back to direct Gemini call.", e);
-      return callGeminiDirectly(text);
-    }
-    throw new ParseFoodError('NETWORK', null, `Network error: ${String(e)}`);
+    if (e instanceof ParseFoodError) throw e;
+    console.warn('/api/parse-food endpoint not reached, checking fallback options...', e);
   }
 
-  // Try to read body as JSON regardless of status
-  const body = await res.json().catch(() => ({}) as Record<string, unknown>) as {
-    error?: string;
-    message?: string;
-    items?: ParsedFoodItem[];
-  };
+  // 2. Try Supabase Edge Function if Supabase is enabled
+  if (isSupabaseEnabled) {
+    const url = `${SUPABASE_URL}/functions/v1/parse-food`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          Apikey: SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ text }),
+      });
 
-  if (!res.ok) {
-    if (res.status === 404 && import.meta.env.VITE_GEMINI_API_KEY) {
-      console.warn("Edge Function not found (404). Falling back to direct Gemini call.");
-      return callGeminiDirectly(text);
+      if (res.status !== 404) {
+        const body = await res.json().catch(() => ({}) as Record<string, unknown>) as {
+          error?: string;
+          message?: string;
+          items?: ParsedFoodItem[];
+        };
+
+        if (!res.ok) {
+          const code = body.error as ApiErrorCode | undefined;
+          const knownCodes: ApiErrorCode[] = [
+            'GEMINI_API_KEY_MISSING',
+            'GEMINI_API_KEY_INVALID',
+            'GEMINI_RATE_LIMIT',
+            'GEMINI_API_ERROR',
+            'INTERNAL_ERROR',
+          ];
+          const resolvedCode: ApiErrorCode = knownCodes.includes(code ?? null as never)
+            ? (code as ApiErrorCode)
+            : 'GEMINI_API_ERROR';
+          throw new ParseFoodError(resolvedCode, res.status, body.message ?? `HTTP ${res.status}`);
+        }
+
+        if (Array.isArray(body.items)) return body.items;
+      }
+    } catch (e) {
+      if (e instanceof ParseFoodError) throw e;
+      console.warn('Supabase Edge Function failed, checking direct fallback...', e);
     }
-
-    const code = body.error as ApiErrorCode | undefined;
-    const knownCodes: ApiErrorCode[] = [
-      'GEMINI_API_KEY_MISSING',
-      'GEMINI_API_KEY_INVALID',
-      'GEMINI_RATE_LIMIT',
-      'GEMINI_API_ERROR',
-      'INTERNAL_ERROR',
-    ];
-    const resolvedCode: ApiErrorCode = knownCodes.includes(code ?? null as never)
-      ? (code as ApiErrorCode)
-      : 'GEMINI_API_ERROR';
-    throw new ParseFoodError(resolvedCode, res.status, body.message ?? `HTTP ${res.status}`);
   }
 
-  if (!Array.isArray(body.items)) return [];
-  return body.items;
+  // 3. Fallback to direct Gemini API call if VITE_GEMINI_API_KEY is available
+  if (import.meta.env.VITE_GEMINI_API_KEY) {
+    return callGeminiDirectly(text);
+  }
+
+  // 4. Offline fallback: local rule-based NLP parser
+  return parseFoodText(text);
 }
 
 export function FoodLogger({ isFuture, entries, onAdd, onDelete }: FoodLoggerProps) {
@@ -253,7 +288,7 @@ export function FoodLogger({ isFuture, entries, onAdd, onDelete }: FoodLoggerPro
     setStage('analyzing');
     clearError();
     try {
-      const items = await callParseFoodEdgeFunction(text.trim());
+      const items = await callParseFoodApi(text.trim());
       setParsed(items);
       setStage('preview');
     } catch (e) {
