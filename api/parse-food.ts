@@ -28,6 +28,11 @@ const SYSTEM_PROMPT = `أنت خبير تغذية. حلّل وصف الطعام 
 
 import type { ApiRequest, ApiResponse } from './_db.js';
 
+// Fast "lite" models first (~1s). Big models last.
+const DEFAULT_MODELS = 'gemini-3.5-flash-lite,gemini-flash-lite-latest,gemini-3.8-flash';
+const PER_MODEL_TIMEOUT_MS = 6000;
+const TOTAL_BUDGET_MS = 16000;
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   // Handle CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -54,56 +59,78 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
 
     let text = '';
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-    text = (body.text ?? '').trim();
+    const body = (typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {})) as Record<string, unknown>;
+    text = (typeof body.text === 'string' ? body.text : '').trim();
 
     if (!text) {
       return res.status(200).json({ items: [] });
     }
 
-    const model = (process.env.GEMINI_MODEL || 'gemini-3.8-flash').trim();
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const requestInit = {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const requestBody = JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: SYSTEM_PROMPT }],
       },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: SYSTEM_PROMPT }],
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: `حلّل: "${text}"` }],
         },
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: `حلّل: "${text}"` }],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-        },
-      }),
-    };
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: 0.2,
+      },
+    });
 
-    // Gemini returns transient 503 (high demand) / 429 often; retry a few times.
-    let geminiRes = await fetch(geminiUrl, requestInit);
-    for (let attempt = 1; attempt <= 2 && (geminiRes.status === 503 || geminiRes.status === 429); attempt++) {
-      await new Promise((r) => setTimeout(r, 1000 * attempt));
-      geminiRes = await fetch(geminiUrl, requestInit);
+    const models = (process.env.GEMINI_MODELS || process.env.GEMINI_MODEL || DEFAULT_MODELS)
+      .split(',')
+      .map((m: string) => m.trim())
+      .filter(Boolean);
+
+    const deadline = Date.now() + TOTAL_BUDGET_MS;
+    let geminiRes: Response | null = null;
+    let lastStatus = 0;
+    let lastErrText = '';
+
+    for (const model of models) {
+      const remaining = deadline - Date.now();
+      if (remaining < 1500) break;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      try {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: requestBody,
+          signal: AbortSignal.timeout(Math.min(PER_MODEL_TIMEOUT_MS, remaining)),
+        });
+        if (r.ok) {
+          geminiRes = r;
+          break;
+        }
+        lastStatus = r.status;
+        lastErrText = await r.text().catch(() => '');
+        console.warn(`[api/parse-food] ${model} -> HTTP ${r.status}: ${lastErrText.slice(0, 200)}`);
+        // A bad/blocked key fails on every model, so stop immediately.
+        if (r.status === 401 || r.status === 403 || (r.status === 400 && /API[_ ]?key/i.test(lastErrText))) break;
+      } catch (e) {
+        lastStatus = 504;
+        lastErrText = String(e);
+        console.warn(`[api/parse-food] ${model} -> ${(e as Error).name} (timeout/network)`);
+      }
     }
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text().catch(() => '');
-      console.error(`[api/parse-food] Gemini returned HTTP ${geminiRes.status}:`, errText.slice(0, 500));
+    if (!geminiRes) {
+      console.error(`[api/parse-food] All models failed. Last HTTP ${lastStatus}:`, lastErrText.slice(0, 500));
 
-      if (geminiRes.status === 400 || geminiRes.status === 403) {
+      if (lastStatus === 401 || lastStatus === 403 || (lastStatus === 400 && /API[_ ]?key/i.test(lastErrText))) {
         return res.status(401).json({
           error: 'GEMINI_API_KEY_INVALID',
-          message: `Gemini rejected the API key (HTTP ${geminiRes.status}). Check that GEMINI_API_KEY is correct.`,
+          message: `Gemini rejected the API key (HTTP ${lastStatus}). Check that GEMINI_API_KEY is correct.`,
           items: [],
         });
       }
 
-      if (geminiRes.status === 429) {
+      if (lastStatus === 429) {
         return res.status(429).json({
           error: 'GEMINI_RATE_LIMIT',
           message: 'Gemini rate limit or quota exceeded.',
@@ -113,8 +140,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
       return res.status(502).json({
         error: 'GEMINI_API_ERROR',
-        message: `Gemini returned HTTP ${geminiRes.status}.`,
-        detail: errText.slice(0, 300),
+        message: `Gemini returned HTTP ${lastStatus}.`,
+        detail: lastErrText.slice(0, 300),
         items: [],
       });
     }
