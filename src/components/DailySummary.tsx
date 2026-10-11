@@ -1,7 +1,8 @@
 import { AlertTriangle, Droplets, Zap, Activity, Info, Flame } from 'lucide-react';
 import { ProgressRing } from './ProgressRing';
 import type { DailyTotals, DailyLog } from '../lib/types';
-import { TARGETS, toArabicDigits } from '../lib/constants';
+import { useConfig } from '../contexts/ConfigContext';
+import { toArabicDigits } from '../lib/constants';
 
 interface DailySummaryProps {
   totals: DailyTotals;
@@ -10,13 +11,16 @@ interface DailySummaryProps {
 }
 
 export function DailySummary({ totals, log, isFuture }: DailySummaryProps) {
-  const sodiumBreached = totals.sodium > TARGETS.sodiumLimit;
-  const sodiumPct = (totals.sodium / TARGETS.sodiumLimit) * 100;
-  const potassiumPct = (totals.potassium / TARGETS.potassiumMin) * 100;
+  const { config } = useConfig();
+  const targets = config.targets;
+
+  const sodiumBreached = totals.sodium > targets.sodiumLimit;
+  const sodiumPct = (totals.sodium / targets.sodiumLimit) * 100;
+  const potassiumPct = (totals.potassium / targets.potassiumMin) * 100;
   const cardioZero = (log?.cardio_calories ?? 0) === 0;
 
   const netCalories = totals.calories - (log?.cardio_calories ?? 0);
-  const calorieDeficit = TARGETS.calories - netCalories;
+  const calorieDeficit = targets.calories - netCalories;
 
   return (
     <section className="card p-5 sm:p-6">
@@ -30,33 +34,33 @@ export function DailySummary({ totals, log, isFuture }: DailySummaryProps) {
         <RingCard
           label="السعرات الحرارية"
           value={totals.calories}
-          max={TARGETS.calories}
+          max={targets.calories}
           unit="كcal"
           color="#10e0a0"
         />
         <RingCard
           label="البروتين"
           value={totals.protein}
-          max={TARGETS.protein}
+          max={targets.protein}
           unit="جم"
           color="#22d3ee"
-          target={`المستهدف: ${toArabicDigits(TARGETS.protein)} جم`}
+          target={`المستهدف: ${toArabicDigits(targets.protein)} جم`}
         />
         <RingCard
           label="الكربوهيدرات"
           value={totals.carbs}
-          max={TARGETS.carbs}
+          max={targets.carbs}
           unit="جم"
           color="#fbbf24"
-          target={`المستهدف: ${toArabicDigits(TARGETS.carbs)} جم`}
+          target={`المستهدف: ${toArabicDigits(targets.carbs)} جم`}
         />
         <RingCard
           label="الدهون الصحية"
           value={totals.fats}
-          max={TARGETS.fats}
+          max={targets.fats}
           unit="جم"
           color="#fb7185"
-          target={`المستهدف: ${toArabicDigits(TARGETS.fats)} جم`}
+          target={`المستهدف: ${toArabicDigits(targets.fats)} جم`}
         />
       </div>
 
@@ -78,7 +82,7 @@ export function DailySummary({ totals, log, isFuture }: DailySummaryProps) {
         <StatTile
           label="حرق الكارديو"
           value={`${toArabicDigits(log?.cardio_calories ?? 0)} كcal`}
-          sub={`المستهدف: ${toArabicDigits(TARGETS.cardioCalories)}`}
+          sub={`المستهدف: ${toArabicDigits(targets.cardioCalories)}`}
           icon={<Zap className="h-4 w-4 text-amber-400" />}
         />
       </div>
@@ -87,7 +91,7 @@ export function DailySummary({ totals, log, isFuture }: DailySummaryProps) {
       {cardioZero && !isFuture && (
         <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-300">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>نصيحة: أضف ٥٠٠ سعرة حرق حركي/كارديو لتأمين العجز اليومي بالكامل!</span>
+          <span>نصيحة: أضف {toArabicDigits(targets.cardioCalories)} سعرة حرق حركي/كارديو لتأمين العجز اليومي بالكامل!</span>
         </div>
       )}
 
@@ -115,7 +119,7 @@ export function DailySummary({ totals, log, isFuture }: DailySummaryProps) {
                 <div>
                   <div className="text-sm font-bold text-slate-100">الصوديوم</div>
                   <div className="text-[10px] font-semibold text-slate-400">
-                    الحد اليومي: {toArabicDigits(TARGETS.sodiumLimit)} ملجم
+                    الحد اليومي: {toArabicDigits(targets.sodiumLimit)} ملجم
                   </div>
                 </div>
               </div>
@@ -145,7 +149,7 @@ export function DailySummary({ totals, log, isFuture }: DailySummaryProps) {
                 />
               </div>
               <div className="mt-1 text-[10px] font-semibold text-slate-500">
-                الحد: {toArabicDigits(TARGETS.sodiumLimit)} ملجم
+                الحد: {toArabicDigits(targets.sodiumLimit)} ملجم
               </div>
             </div>
 
@@ -166,7 +170,7 @@ export function DailySummary({ totals, log, isFuture }: DailySummaryProps) {
                 <div>
                   <div className="text-sm font-bold text-slate-100">البوتاسيوم</div>
                   <div className="text-[10px] font-semibold text-slate-400">
-                    المستهدف: {toArabicDigits(TARGETS.potassiumMin)}-{toArabicDigits(TARGETS.potassiumMax)} ملجم
+                    المستهدف: {toArabicDigits(targets.potassiumMin)}-{toArabicDigits(targets.potassiumMax)} ملجم
                   </div>
                 </div>
               </div>
@@ -195,14 +199,14 @@ export function DailySummary({ totals, log, isFuture }: DailySummaryProps) {
                 />
               </div>
               <div className="mt-1 flex items-center justify-between text-[10px] font-semibold text-slate-500">
-                <span>الحد الأدنى: {toArabicDigits(TARGETS.potassiumMin)} ملجم</span>
-                <span>الأقصى: {toArabicDigits(TARGETS.potassiumMax)} ملجم</span>
+                <span>الحد الأدنى: {toArabicDigits(targets.potassiumMin)} ملجم</span>
+                <span>الأقصى: {toArabicDigits(targets.potassiumMax)} ملجم</span>
               </div>
             </div>
 
-            {totals.potassium < TARGETS.potassiumMin && totals.potassium > 0 && (
+            {totals.potassium < targets.potassiumMin && totals.potassium > 0 && (
               <div className="mt-3 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-[11px] font-semibold text-cyan-200">
-                البوتاسيوم يساعد على طرد الماء الزائد — استهدف {toArabicDigits(TARGETS.potassiumMin)} ملجم يومياً.
+                البوتاسيوم يساعد على طرد الماء الزائد — استهدف {toArabicDigits(targets.potassiumMin)} ملجم يومياً.
               </div>
             )}
           </div>
@@ -211,7 +215,7 @@ export function DailySummary({ totals, log, isFuture }: DailySummaryProps) {
         {/* Water + sodium balance hint */}
         <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-white/5 bg-ink-900/50 px-4 py-2.5 text-[11px] font-semibold text-slate-400">
           <Droplets className="h-3.5 w-3.5 text-cyan-400" />
-          شرب الماء: {toArabicDigits(log?.water_liters ?? 0)} / {toArabicDigits(TARGETS.waterLiters)} لتر —
+          شرب الماء: {toArabicDigits(log?.water_liters ?? 0)} / {toArabicDigits(targets.waterLiters)} لتر —
           الماء يطرد الصوديوم الزائد ويمنع احتباس السوائل.
         </div>
       </div>

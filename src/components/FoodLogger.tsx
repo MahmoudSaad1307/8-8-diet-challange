@@ -13,7 +13,8 @@ import {
   X,
 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { TARGETS, toArabicDigits } from '../lib/constants';
+import { useConfig } from '../contexts/ConfigContext';
+import { toArabicDigits } from '../lib/constants';
 import { aggregateItems, formatGrams, parseFoodText } from '../lib/nlpParser';
 import type { FoodEntry, ParsedFoodItem } from '../lib/types';
 
@@ -228,6 +229,8 @@ async function callParseFoodApi(text: string): Promise<ParsedFoodItem[]> {
 }
 
 export function FoodLogger({ isFuture, entries, onAdd, onDelete }: FoodLoggerProps) {
+  const { config } = useConfig();
+  const targets = config.targets;
   const [text, setText] = useState('');
   const [stage, setStage] = useState<Stage>('input');
   const [parsed, setParsed] = useState<ParsedFoodItem[]>([]);
@@ -387,12 +390,12 @@ export function FoodLogger({ isFuture, entries, onAdd, onDelete }: FoodLoggerPro
               <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-4">
                 <div className="mb-3 text-[11px] font-bold text-emerald-300">إجمالي الوجبة</div>
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                  <TotalStat label="السعرات" value={toArabicDigits(totals.calories)} unit="كcal" target={TARGETS.calories} />
-                  <TotalStat label="البروتين" value={toArabicDigits(totals.protein)} unit="جم" target={TARGETS.protein} />
-                  <TotalStat label="الكربوهيدرات" value={toArabicDigits(totals.carbs)} unit="جم" target={TARGETS.carbs} />
-                  <TotalStat label="الدهون" value={toArabicDigits(totals.fats)} unit="جم" target={TARGETS.fats} />
-                  <TotalStat label="الصوديوم" value={toArabicDigits(totals.sodium)} unit="ملجم" target={TARGETS.sodiumLimit} warn />
-                  <TotalStat label="البوتاسيوم" value={toArabicDigits(totals.potassium)} unit="ملجم" target={TARGETS.potassiumMin} />
+                  <TotalStat label="السعرات" value={toArabicDigits(totals.calories)} unit="كcal" target={targets.calories} />
+                  <TotalStat label="البروتين" value={toArabicDigits(totals.protein)} unit="جم" target={targets.protein} />
+                  <TotalStat label="الكربوهيدرات" value={toArabicDigits(totals.carbs)} unit="جم" target={targets.carbs} />
+                  <TotalStat label="الدهون" value={toArabicDigits(totals.fats)} unit="جم" target={targets.fats} />
+                  <TotalStat label="الصوديوم" value={toArabicDigits(totals.sodium)} unit="ملجم" target={targets.sodiumLimit} warn />
+                  <TotalStat label="البوتاسيوم" value={toArabicDigits(totals.potassium)} unit="ملجم" target={targets.potassiumMin} />
                 </div>
               </div>
             </>

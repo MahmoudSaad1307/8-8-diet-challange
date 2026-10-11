@@ -1,30 +1,29 @@
 import { useEffect, useState } from 'react';
-import { Target, Calendar, TrendingDown, Flame, Scale } from 'lucide-react';
+import { Target, Calendar, TrendingDown, Flame, Scale, Settings } from 'lucide-react';
+import { useConfig } from '../contexts/ConfigContext';
 import {
-  GOAL_DATE,
-  START_DATE,
-  START_WEIGHT_KG,
-  TARGET_WEIGHT_KG,
   toArabicDigits,
   formatArabicDate,
 } from '../lib/constants';
 
 interface HeaderProps {
   currentWeight: number | null;
+  onOpenSettings?: () => void;
 }
 
-function useCountdown() {
-  const [remaining, setRemaining] = useState(() => calcRemaining());
+function useCountdown(targetDate: Date) {
+  const [remaining, setRemaining] = useState(() => calcRemaining(targetDate));
   useEffect(() => {
-    const id = setInterval(() => setRemaining(calcRemaining()), 1000);
+    setRemaining(calcRemaining(targetDate));
+    const id = setInterval(() => setRemaining(calcRemaining(targetDate)), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [targetDate]);
   return remaining;
 }
 
-function calcRemaining() {
+function calcRemaining(targetDate: Date) {
   const now = new Date();
-  const diff = GOAL_DATE.getTime() - now.getTime();
+  const diff = targetDate.getTime() - now.getTime();
   if (diff <= 0) {
     return { days: 0, hours: 0, minutes: 0, seconds: 0, done: true };
   }
@@ -37,17 +36,20 @@ function calcRemaining() {
   };
 }
 
-export function Header({ currentWeight }: HeaderProps) {
-  const r = useCountdown();
+export function Header({ currentWeight, onOpenSettings }: HeaderProps) {
+  const { config, startDateObj, goalDateObj } = useConfig();
+  const r = useCountdown(goalDateObj);
   
   const now = new Date();
-  const totalMs = GOAL_DATE.getTime() - START_DATE.getTime();
-  const elapsedMs = now.getTime() - START_DATE.getTime();
+  const totalMs = Math.max(1, goalDateObj.getTime() - startDateObj.getTime());
+  const elapsedMs = Math.max(0, now.getTime() - startDateObj.getTime());
   const timeProgress = Math.max(0, Math.min(100, (elapsedMs / totalMs) * 100));
 
-  const weight = currentWeight ?? START_WEIGHT_KG;
-  const weightLost = Math.max(0, START_WEIGHT_KG - weight);
-  const weightToLose = START_WEIGHT_KG - TARGET_WEIGHT_KG;
+  const startWeight = config.startWeightKg;
+  const targetWeight = config.targetWeightKg;
+  const weight = currentWeight ?? startWeight;
+  const weightLost = Math.max(0, startWeight - weight);
+  const weightToLose = Math.max(0.1, startWeight - targetWeight);
   const weightProgress = Math.max(0, Math.min(100, (weightLost / weightToLose) * 100));
 
   return (
@@ -74,16 +76,28 @@ export function Header({ currentWeight }: HeaderProps) {
                 تحدّي التنشيف
               </h1>
               <p className="text-[11px] font-semibold text-emerald-300/80 sm:text-xs">
-                رحلة الوصول إلى ٦٥ كجم
+                رحلة الوصول إلى {toArabicDigits(targetWeight)} كجم
               </p>
             </div>
           </div>
-          <div className="chip border border-emerald-400/30 bg-emerald-500/10 text-emerald-300">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-            </span>
-            مباشر
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-ink-850/80 px-3 py-1.5 text-xs font-bold text-slate-300 transition-all hover:border-emerald-400/40 hover:bg-emerald-500/10 hover:text-white"
+              title="تخصيص أهداف التحدي والتواريخ"
+            >
+              <Settings className="h-4 w-4 text-emerald-400" />
+              <span className="hidden sm:inline">الإعدادات</span>
+            </button>
+
+            <div className="chip border border-emerald-400/30 bg-emerald-500/10 text-emerald-300">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+              </span>
+              مباشر
+            </div>
           </div>
         </div>
 
@@ -96,7 +110,7 @@ export function Header({ currentWeight }: HeaderProps) {
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="font-display text-3xl font-extrabold text-white sm:text-4xl">
-                ٨ أغسطس ٢٠٢٦
+                {formatArabicDate(goalDateObj)}
               </span>
             </div>
 
@@ -136,7 +150,7 @@ export function Header({ currentWeight }: HeaderProps) {
             </div>
             <div className="mt-1 flex items-center justify-between text-xs">
               <span className="text-slate-400">
-                من {toArabicDigits(START_WEIGHT_KG)} إلى {toArabicDigits(TARGET_WEIGHT_KG)} كجم
+                من {toArabicDigits(startWeight)} إلى {toArabicDigits(targetWeight)} كجم
               </span>
               <span className="font-bold text-emerald-300">{toArabicDigits(Math.round(weightProgress))}٪</span>
             </div>
@@ -155,7 +169,7 @@ export function Header({ currentWeight }: HeaderProps) {
                   المتبقي
                 </span>
                 <span className="text-emerald-300">
-                  {toArabicDigits(Math.max(0, weight - TARGET_WEIGHT_KG).toFixed(1))} كجم
+                  {toArabicDigits(Math.max(0, weight - targetWeight).toFixed(1))} كجم
                 </span>
               </div>
             </div>

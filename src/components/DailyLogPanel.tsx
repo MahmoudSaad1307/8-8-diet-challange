@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Scale, Dumbbell, Flame, Droplets, Plus, Minus, Check, X } from 'lucide-react';
 import type { DailyLog } from '../lib/types';
-import { TARGETS, toArabicDigits } from '../lib/constants';
+import { useConfig } from '../contexts/ConfigContext';
+import { toArabicDigits } from '../lib/constants';
 
 interface DailyLogPanelProps {
   log: DailyLog | null;
@@ -12,10 +13,23 @@ interface DailyLogPanelProps {
 }
 
 export function DailyLogPanel({ log, dateKey, isFuture, isToday, onChange }: DailyLogPanelProps) {
+  const { config } = useConfig();
+  const targets = config.targets;
   const [weightInput, setWeightInput] = useState<string>(log?.weight_kg ? String(log.weight_kg) : '');
   const [cardioInput, setCardioInput] = useState<string>(String(log?.cardio_calories ?? 0));
   const [waterInput, setWaterInput] = useState<string>(String(log?.water_liters ?? 0));
-  const [saving, setSaving] = useState(false);
+  // Track each field independently to avoid race conditions between concurrent saves
+  const [pending, setPending] = useState<Set<string>>(new Set());
+
+  const setSaving = (key: string, active: boolean) =>
+    setPending((prev) => {
+      const next = new Set(prev);
+      if (active) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+
+  const saving = pending.size > 0;
 
   useEffect(() => {
     setWeightInput(log?.weight_kg ? String(log.weight_kg) : '');
@@ -29,32 +43,32 @@ export function DailyLogPanel({ log, dateKey, isFuture, isToday, onChange }: Dai
     if (disabled) return;
     const v = parseFloat(weightInput);
     if (Number.isNaN(v) || v <= 0) return;
-    setSaving(true);
+    setSaving('weight', true);
     try {
       await onChange({ weight_kg: v });
     } finally {
-      setSaving(false);
+      setSaving('weight', false);
     }
   };
 
   const handleCardioSave = async () => {
     if (disabled) return;
     const v = Math.max(0, parseInt(cardioInput) || 0);
-    setSaving(true);
+    setSaving('cardio', true);
     try {
       await onChange({ cardio_calories: v });
     } finally {
-      setSaving(false);
+      setSaving('cardio', false);
     }
   };
 
   const toggleResistance = async () => {
     if (disabled) return;
-    setSaving(true);
+    setSaving('resistance', true);
     try {
       await onChange({ resistance_done: !log?.resistance_done });
     } finally {
-      setSaving(false);
+      setSaving('resistance', false);
     }
   };
 
@@ -63,16 +77,17 @@ export function DailyLogPanel({ log, dateKey, isFuture, isToday, onChange }: Dai
     const current = parseFloat(waterInput) || 0;
     const next = Math.max(0, Math.round((current + delta) * 10) / 10);
     setWaterInput(String(next));
-    setSaving(true);
+    setSaving('water', true);
     try {
       await onChange({ water_liters: next });
     } finally {
-      setSaving(false);
+      setSaving('water', false);
     }
   };
 
-  const waterPct = Math.min(100, ((parseFloat(waterInput) || 0) / TARGETS.waterLiters) * 100);
+  const waterPct = Math.min(100, ((parseFloat(waterInput) || 0) / targets.waterLiters) * 100);
   const resistanceDone = log?.resistance_done ?? false;
+
 
   return (
     <section className={`card p-5 sm:p-6 ${disabled ? 'opacity-50' : ''}`}>
@@ -185,7 +200,7 @@ export function DailyLogPanel({ log, dateKey, isFuture, isToday, onChange }: Dai
             <span className="flex items-center text-xs font-semibold text-slate-400">كcal</span>
           </div>
           <div className="mt-2 text-[11px] font-semibold text-cyan-300/80">
-            المستهدف: {toArabicDigits(TARGETS.cardioCalories)} سعرة
+            المستهدف: {toArabicDigits(targets.cardioCalories)} سعرة
           </div>
         </div>
       </div>
@@ -198,7 +213,7 @@ export function DailyLogPanel({ log, dateKey, isFuture, isToday, onChange }: Dai
             <span className="text-sm font-bold">معدل شرب الماء</span>
           </div>
           <span className="text-xs font-semibold text-slate-400">
-            المستهدف: {toArabicDigits(TARGETS.waterLiters)} لتر
+            المستهدف: {toArabicDigits(targets.waterLiters)} لتر
           </span>
         </div>
 

@@ -1,22 +1,29 @@
-import type { DailyTargets } from './types';
+import type { DailyTargets, ChallengeConfig } from './types';
 
-export const GOAL_DATE = new Date('2026-08-08T12:00:00+03:00');
-export const START_DATE = new Date('2026-07-05T00:00:00+03:00');
-
-export const START_WEIGHT_KG = 69.7;
-export const TARGET_WEIGHT_KG = 65.0;
-
-export const TARGETS: DailyTargets = {
-  calories: 1500,
-  protein: 125,
-  carbs: 150,
-  fats: 44,
-  sodiumLimit: 2300,
-  potassiumMin: 3500,
-  potassiumMax: 4700,
-  waterLiters: 4,
-  cardioCalories: 500,
+export const DEFAULT_CHALLENGE_CONFIG: ChallengeConfig = {
+  startDate: '2026-10-01',
+  goalDate: '2026-12-31',
+  startWeightKg: 75.0,
+  targetWeightKg: 65.0,
+  targets: {
+    calories: 1500,
+    protein: 125,
+    carbs: 150,
+    fats: 44,
+    sodiumLimit: 2300,
+    potassiumMin: 3500,
+    potassiumMax: 4700,
+    waterLiters: 4,
+    cardioCalories: 500,
+  },
 };
+
+// Fallback constants for backward compatibility
+export const GOAL_DATE = new Date(DEFAULT_CHALLENGE_CONFIG.goalDate);
+export const START_DATE = new Date(DEFAULT_CHALLENGE_CONFIG.startDate);
+export const START_WEIGHT_KG = DEFAULT_CHALLENGE_CONFIG.startWeightKg;
+export const TARGET_WEIGHT_KG = DEFAULT_CHALLENGE_CONFIG.targetWeightKg;
+export const TARGETS: DailyTargets = DEFAULT_CHALLENGE_CONFIG.targets;
 
 export const ARABIC_MONTHS = [
   'يناير',

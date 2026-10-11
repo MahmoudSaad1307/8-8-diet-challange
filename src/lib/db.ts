@@ -80,7 +80,7 @@ function lsAllFoods(): FoodEntry[] {
 
 // ---------- API Client ----------
 
-async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const key = localStorage.getItem('mahmoud_key') || '';
   const res = await fetch(path, {
     ...init,
@@ -177,7 +177,7 @@ export async function addFoodEntry(
     });
   } catch (error) {
     console.warn('addFoodEntry error, falling back to local', error);
-    return lsAddFood({ ...payload, id: '', created_at: '' } as never);
+    return lsAddFood(payload);
   }
 }
 

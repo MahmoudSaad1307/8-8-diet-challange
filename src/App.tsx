@@ -5,13 +5,10 @@ import { CalendarTrace } from './components/CalendarTrace';
 import { DailyLogPanel } from './components/DailyLogPanel';
 import { FoodLogger } from './components/FoodLogger';
 import { DailySummary } from './components/DailySummary';
+import { SettingsDashboard } from './components/SettingsDashboard';
+import { useConfig } from './contexts/ConfigContext';
 import type { CalendarDayStatus, DailyLog, DailyTotals, FoodEntry, ParsedFoodItem } from './lib/types';
 import {
-  GOAL_DATE,
-  START_DATE,
-  TARGETS,
-  START_WEIGHT_KG,
-  TARGET_WEIGHT_KG,
   addDays,
   daysBetween,
   formatDateKey,
@@ -31,12 +28,16 @@ import {
 } from './lib/db';
 
 function App() {
+  const { config, startDateObj, goalDateObj, isLoading: isConfigLoading } = useConfig();
+
   const [isAuthorized, setIsAuthorized] = useState<boolean>(() => {
     return (
       localStorage.getItem('mahmoud_authorized') === 'true' &&
       Boolean(localStorage.getItem('mahmoud_key'))
     );
   });
+
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const today = useMemo(() => startOfDay(new Date()), []);
   const [selectedDate, setSelectedDate] = useState<string>(formatDateKey(today));
@@ -82,8 +83,22 @@ function App() {
 
   // Build calendar days from start/today to goal date
   const calendarDays: CalendarDayStatus[] = useMemo(() => {
-    const calendarStart = showPastDays ? START_DATE : today;
-    const total = daysBetween(calendarStart, GOAL_DATE);
+    let calStart = showPastDays ? startDateObj : today;
+    let calEnd = goalDateObj > today ? goalDateObj : today;
+
+    // If there are recorded logs before calStart and showPastDays is enabled, extend start
+    if (showPastDays && allLogs.length > 0) {
+      for (const l of allLogs) {
+        const ld = parseDateKey(l.log_date);
+        if (ld < calStart) calStart = ld;
+      }
+    }
+
+    if (calStart > calEnd) {
+      calStart = calEnd;
+    }
+
+    const total = Math.max(0, daysBetween(calStart, calEnd));
     const logMap = new Map(allLogs.map((l) => [l.log_date, l]));
     const foodMap = new Map<string, FoodEntry[]>();
     for (const f of allFoods) {
@@ -93,7 +108,7 @@ function App() {
 
     const days: CalendarDayStatus[] = [];
     for (let i = 0; i <= total; i++) {
-      const d = addDays(calendarStart, i);
+      const d = addDays(calStart, i);
       const key = formatDateKey(d);
       const log = logMap.get(key) ?? null;
       const foods = foodMap.get(key) ?? [];
@@ -109,14 +124,14 @@ function App() {
         water_liters: log?.water_liters ? Number(log.water_liters) : 0,
         calories,
         sodium,
-        sodiumBreached: sodium > TARGETS.sodiumLimit,
+        sodiumBreached: sodium > config.targets.sodiumLimit,
         isToday,
         isFuture: d > today,
         isPast: d < today,
       });
     }
     return days;
-  }, [allLogs, allFoods, today, showPastDays]);
+  }, [allLogs, allFoods, today, showPastDays, startDateObj, goalDateObj, config.targets.sodiumLimit]);
 
   // Daily totals from current foods
   const dailyTotals: DailyTotals = useMemo(() => {
@@ -194,7 +209,10 @@ function App() {
 
   return (
     <div className="min-h-screen pb-16">
-      <Header currentWeight={latestWeight ?? START_WEIGHT_KG} />
+      <Header
+        currentWeight={latestWeight ?? config.startWeightKg}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+      />
 
       <main className="mx-auto max-w-6xl space-y-4 px-4 sm:space-y-5 sm:px-6">
         {/* Selected day banner */}
@@ -225,7 +243,7 @@ function App() {
           onTogglePastDays={setShowPastDays}
         />
 
-        {loading ? (
+        {loading || isConfigLoading ? (
           <div className="card p-8 text-center text-sm text-slate-400">جارٍ التحميل...</div>
         ) : (
           <>
@@ -249,10 +267,15 @@ function App() {
         )}
 
         <footer className="mt-8 border-t border-white/5 pt-6 text-center text-[11px] font-semibold text-slate-500">
-          تحدّي التنشيف · ينتهي في {toArabicDigits(8)} أغسطس {toArabicDigits(2026)} · صُمّم للوصول إلى{' '}
-          {toArabicDigits(TARGET_WEIGHT_KG)} كجم
+          تحدّي التنشيف · ينتهي في {formatArabicDate(goalDateObj)} · صُمّم للوصول إلى{' '}
+          {toArabicDigits(config.targetWeightKg)} كجم
         </footer>
       </main>
+
+      <SettingsDashboard
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
     </div>
   );
 }

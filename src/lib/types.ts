@@ -55,6 +55,14 @@ export interface DailyTargets {
   cardioCalories: number;
 }
 
+export interface ChallengeConfig {
+  startDate: string; // YYYY-MM-DD
+  goalDate: string; // YYYY-MM-DD
+  startWeightKg: number;
+  targetWeightKg: number;
+  targets: DailyTargets;
+}
+
 export type CalendarDayStatus = {
   date: string;
   hasLog: boolean;
